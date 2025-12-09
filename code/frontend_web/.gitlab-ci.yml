@@ -1,0 +1,37 @@
+stages:
+  - test
+  - build
+
+# Run type checks and unit tests
+unit_tests:
+  stage: test
+  image: node:22-alpine
+  script: |
+    cd code/frontend_web
+    
+    # Compatibility issue fixed with --legacy-peer-deps
+    /usr/local/bin/npm ci --legacy-peer-deps
+    
+    /usr/local/bin/npm run type-check
+    /usr/local/bin/npm run test:unit
+  only:
+    - branches
+
+# Build the Docker image for the frontend
+frontend_build:
+  stage: build
+  image: docker:24.0.7
+  services:
+    - docker:dind
+  variables:
+    DOCKER_DRIVER: overlay2
+  script:
+    - cd code/frontend_web
+    - echo "Logging in to GitLab Container Registry..."
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" "$CI_REGISTRY" --password-stdin
+    - echo "Building Docker image..."
+    - docker build -t $CI_REGISTRY_IMAGE/frontend_web:$CI_COMMIT_SHORT_SHA .
+    - echo "Pushing Docker image..."
+    - docker push $CI_REGISTRY_IMAGE/frontend_web:$CI_COMMIT_SHORT_SHA
+  only:
+    - main

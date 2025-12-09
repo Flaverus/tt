@@ -1,0 +1,13 @@
+services:
+  backend-mcp:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      GROQ_API_KEY: ${GROQ_API_KEY:?Set GROQ_API_KEY before running docker compose}
+      MONGO_MCP_HTTP_URL: ${MONGO_MCP_HTTP_URL:-http://host.docker.internal:3000/mcp}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

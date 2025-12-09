@@ -1,37 +1,88 @@
 stages:
-  - test
-  - build
+  - validate
+  - trigger
+  - notify
 
-# Run type checks and unit tests
-unit_tests:
-  stage: test
-  image: node:22-alpine
-  script: |
-    cd code/frontend_web
-    
-    # Compatibility issue fixed with --legacy-peer-deps
-    /usr/local/bin/npm ci --legacy-peer-deps
-    
-    /usr/local/bin/npm run type-check
-    /usr/local/bin/npm run test:unit
-  only:
-    - branches
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH
+      when: always
 
-# Build the Docker image for the frontend
-frontend_build:
-  stage: build
-  image: docker:24.0.7
-  services:
-    - docker:dind
-  variables:
-    DOCKER_DRIVER: overlay2
+variables:
+  PROJECT_NAME: "temperature-tracker"
+
+# Template for common trigger configuration
+.trigger_template: &trigger_template
+  stage: trigger
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" # needed otherwise downstream pipelines are not triggered in MRs
+      when: always
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: always
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+      when: always
+
+validate_runner: # run always to ensure runner is working
+  stage: validate
   script:
-    - cd code/frontend_web
-    - echo "Logging in to GitLab Container Registry..."
-    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" "$CI_REGISTRY" --password-stdin
-    - echo "Building Docker image..."
-    - docker build -t $CI_REGISTRY_IMAGE/frontend_web:$CI_COMMIT_SHORT_SHA .
-    - echo "Pushing Docker image..."
-    - docker push $CI_REGISTRY_IMAGE/frontend_web:$CI_COMMIT_SHORT_SHA
-  only:
-    - main
+    - echo "✅ Runner is operational."
+  rules:
+    - when: always
+    
+
+# Trigger frontend pipeline
+trigger_frontend_web_pipeline:
+  <<: *trigger_template
+  trigger:
+    include:
+      - local: 'code/frontend_web/.gitlab-ci.yml'
+    strategy: depend
+
+trigger_backend_web_pipeline:
+  <<: *trigger_template
+  trigger:
+    include:
+      - local: 'code/backend_web/.backend-web-ci.yml'
+    strategy: depend
+
+trigger_embedded_sensor_pipeline:
+  <<: *trigger_template
+  trigger:
+    include:
+      - local: 'code/embedded_sensor/.gitlab/.gitlab-ci.yml'
+    strategy: depend
+
+# Trigger backend_broker pipeline
+trigger_backend_broker_pipeline:
+  <<: *trigger_template
+  trigger:
+    include:
+      - local: "code/backend_broker/.gitlab-ci.yml"
+    strategy: depend
+
+##########################################
+# ToDO Add other pipelines as needed
+##########################################
+
+
+# Notification job for pipeline completion
+pipeline_notification:
+  stage: notify
+  image: alpine:latest
+  script: |
+    echo "🎉 All pipeline components completed successfully!"
+    echo "Project: $PROJECT_NAME"
+    echo "Branch: $CI_COMMIT_BRANCH"
+    echo "Commit: $CI_COMMIT_SHA"
+    echo "Pipeline URL: $CI_PIPELINE_URL"
+  needs:
+    - trigger_frontend_web_pipeline
+    - trigger_backend_web_pipeline
+    - trigger_embedded_sensor_pipeline
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: on_success
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+      when: on_success
+    - if: $CI_MERGE_REQUEST_IID
+      when: on_success

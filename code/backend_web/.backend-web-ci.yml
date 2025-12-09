@@ -1,0 +1,52 @@
+stages:
+  - sast
+  - test
+  - build
+
+# --- SAST Stage ---
+include:
+  - template: Security/SAST.gitlab-ci.yml
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_BUILDKIT: 1
+
+# --- Test Stage ---
+test:
+  stage: test
+  image: node:18
+  script:
+    - cd code/backend_web
+    - echo "Installing dependencies..."
+    - npm ci
+    - echo "Running tests..."
+    - npm test
+  artifacts:
+    when: always
+    expire_in: 1 week
+    reports:
+      junit: code/backend_web/test-report.xml
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - node_modules/
+
+# --- Build Stage ---
+build:
+  stage: build
+  image: docker:25.0.3
+  services:
+    - docker:25.0.3-dind
+  variables:
+    NODE_ENV: production
+  script:
+    - cd code/backend_web
+    - echo "Logging in to GitLab Container Registry..."
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" "$CI_REGISTRY" --password-stdin
+    - echo "Building Docker image..."
+    - docker build -t $CI_REGISTRY_IMAGE/backend_web:$CI_COMMIT_SHORT_SHA .
+    - echo "Pushing Docker image..."
+    - docker push $CI_REGISTRY_IMAGE/backend_web:$CI_COMMIT_SHORT_SHA
+  artifacts:
+    name: "docker-image-$CI_COMMIT_SHORT_SHA"
+    expire_in: 1 week

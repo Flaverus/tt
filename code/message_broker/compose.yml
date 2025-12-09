@@ -1,0 +1,7 @@
+services:
+  mqtt:
+    image: eclipse-mosquitto:2.0
+    ports:
+      - "1883:1883" # MQTT protocol
+      - "9001:9001" # WebSockets (optional)
+    restart: unless-stopped

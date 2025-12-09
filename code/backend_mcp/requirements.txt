@@ -1,0 +1,6 @@
+fastapi>=0.121.0
+uvicorn>=0.38.0
+mcp>=1.22.0
+mcp-use>=1.4.0
+langchain>=1.0.8
+langchain-groq>=0.1.0

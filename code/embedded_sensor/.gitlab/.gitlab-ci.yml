@@ -1,0 +1,20 @@
+# repository root pipeline file for GitLab
+# copy this file into the gitlab repository root folder
+
+image: docker:cli
+
+stages:
+  - validate
+  - build
+  - test
+  - deploy
+
+validate_runner:
+  stage: validate
+  script:
+    - echo "Validating runner setup..."
+
+include:
+  # - local: '.gitlab/.gitlab-ci_dind.yml'    # using GitLab with docker-in-docker
+  - local: 'code/embedded_sensor/.gitlab/.gitlab-ci_dind.yml'    # using GitLab with docker-in-docker
+#  - local: '.gitlab/.gitlab-ci_image.yml' # using GitLab with image from https://hub.docker.com/
