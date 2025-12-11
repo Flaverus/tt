@@ -2,39 +2,59 @@ export interface TemperatureResponse {
   temperature: number;
   status: 'too cold' | 'too warm' | 'just right';
   message: string;
+  humidity?: number | null;
+  timestamp?: string | null;
+  sensorId?: string | null;
 }
 
-export const API_URL = '/api/temperature';
+import { API_BASE_URL } from './config';
 
-const THRESHOLD = 18; // The LLM will later tell us if it is too warm or too cold. For now, we ise 18 degrees as threshold
+export const API_URL = `${API_BASE_URL}/api/temperature`;
 
-/**
- * Fakes an asynchronous call to the backend to get the temperature and status.
- */
+const isValidStatus = (status: unknown): status is TemperatureResponse['status'] =>
+  status === 'too cold' || status === 'too warm' || status === 'just right';
+
+type RawTemperatureResponse = {
+  temperature?: unknown;
+  humidity?: unknown;
+  timestamp?: unknown;
+  sensorId?: unknown;
+  status?: unknown;
+  message?: unknown;
+};
+
 export const fetchTemperatureFromBackend = async (): Promise<TemperatureResponse> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const randomTemp = Math.floor(Math.random() * 21) + 10; // Random Temperature between 10 and 30 degrees
+  const response = await fetch(API_URL);
 
-      let status: TemperatureResponse['status'];
-      let message: string;
+  if (!response.ok) {
+    throw new Error(`Backend responded with status ${response.status}`);
+  }
 
-      if (randomTemp < THRESHOLD) {
-        status = 'too cold';
-        message = 'It is too cold, you should turn on the heater.';
-      } else if (randomTemp > THRESHOLD) {
-        status = 'too warm';
-        message = 'It is too warm, you should turn off the heater.';
-      } else {
-        status = 'just right';
-        message = 'Temperature is just right.';
-      }
+  const payload: RawTemperatureResponse = await response.json();
 
-      resolve({
-        temperature: randomTemp,
-        status: status,
-        message: message,
-      });
-    }, 500);
-  });
+  const temperature = Number(payload.temperature);
+  if (!Number.isFinite(temperature)) {
+    throw new Error('Invalid temperature value from backend');
+  }
+
+  if (!isValidStatus(payload.status) || typeof payload.message !== 'string') {
+    throw new Error('Invalid status value from backend');
+  }
+
+  let timestamp: string | null = null;
+  if (payload.timestamp) {
+    const parsedTimestamp = new Date(payload.timestamp as string);
+    timestamp = Number.isNaN(parsedTimestamp.getTime())
+      ? null
+      : parsedTimestamp.toISOString();
+  }
+
+  return {
+    temperature,
+    humidity: typeof payload.humidity === 'number' ? payload.humidity : null,
+    timestamp,
+    sensorId: typeof payload.sensorId === 'string' ? payload.sensorId : null,
+    status: payload.status,
+    message: payload.message,
+  };
 };

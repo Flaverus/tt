@@ -19,3 +19,12 @@ This assignment required creating a design specification document for the projec
 [View Report](design/design_specifications.md)
 
 ---
+
+### How to Use This Repository with docker compose
+```bash
+# copy .env.example to .env and set your environment variables
+cp .env.example .env
+
+docker compose up --build
+
+```

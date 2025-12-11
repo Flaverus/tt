@@ -24,6 +24,7 @@ COPY --from=dependencies --chown=nodejs:nodejs /app/node_modules ./node_modules
 # Copy application code
 COPY --chown=nodejs:nodejs package*.json ./
 COPY --chown=nodejs:nodejs index.js ./
+COPY --chown=nodejs:nodejs db.js ./
 
 # Switch to non-root user
 USER nodejs

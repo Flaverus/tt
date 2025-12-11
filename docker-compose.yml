@@ -1,0 +1,108 @@
+services:
+  # Message Broker (MQTT)
+  mqtt:
+    image: eclipse-mosquitto:2.0
+    ports:
+      - "1883:1883" # MQTT protocol
+      - "9001:9001" # WebSockets (optional)
+    restart: unless-stopped
+    networks:
+      - temperature-tracker
+
+  # Database (MongoDB)
+  mongodb:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: user
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: weather
+    volumes:
+      - ./code/database/init-measurements.js:/docker-entrypoint-initdb.d/init-measurements.js:ro
+      - mongodb-data:/data/db
+    networks:
+      - temperature-tracker
+
+  # MongoDB MCP Server
+  mongodb-mcp:
+    image: mongodb/mongodb-mcp-server:latest
+    depends_on:
+      - mongodb
+    ports:
+      - "3000:3000"
+    environment:
+      MDB_MCP_CONNECTION_STRING: mongodb://user:password@mongodb:27017/weather?authSource=admin
+      MDB_MCP_READ_ONLY: "true"
+      MDB_MCP_TRANSPORT: http
+      MDB_MCP_HTTP_HOST: 0.0.0.0
+      MDB_MCP_HTTP_PORT: "3000"
+    networks:
+      - temperature-tracker
+
+  # Backend MCP (Python)
+  backend-mcp:
+    build:
+      context: ./code/backend_mcp
+    ports:
+      - "8001:8000"
+    env_file:
+      - ./code/backend_mcp/.env
+    environment:
+      GROQ_API_KEY: ${GROQ_API_KEY:?Set GROQ_API_KEY before running docker compose}
+      MONGO_MCP_HTTP_URL: ${MONGO_MCP_HTTP_URL:-http://mongodb-mcp:3000/mcp}
+    depends_on:
+      - mongodb-mcp
+    restart: unless-stopped
+    networks:
+      - temperature-tracker
+
+  # Backend Web Server (Node.js)
+  backend-web:
+    build:
+      context: ./code/backend_web
+    environment:
+      NODE_ENV: production
+    ports:
+      - "3001:3000"
+    depends_on:
+      - mongodb
+      - backend-mcp
+    networks:
+      - temperature-tracker
+
+  # Backend Broker (Python/FastAPI)
+  backend-broker:
+    build:
+      context: ./code/backend_broker
+    ports:
+      - "8000:8000"
+    environment:
+      - UVICORN_RELOAD=true
+    volumes:
+      - ./code/backend_broker:/app
+    depends_on:
+      - mqtt
+      - mongodb
+    tty: true
+    networks:
+      - temperature-tracker
+      
+  # Frontend Web (Vue.js)
+  frontend-web:
+    build:
+      context: ./code/frontend_web
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend-web
+    networks:
+      - temperature-tracker
+
+networks:
+  temperature-tracker:
+    driver: bridge
+
+volumes:
+  mongodb-data:

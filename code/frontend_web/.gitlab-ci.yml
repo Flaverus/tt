@@ -17,6 +17,39 @@ unit_tests:
   only:
     - branches
 
+# Run the Cypress E2E/Integration Tests
+# This test needs the application to be running first.
+integration_tests:
+  stage: test
+  image: node:22-bookworm
+
+  variables:
+    PROJECT_DIR: code/frontend_web
+
+  script: |
+    apt-get update -y
+    apt-get install -y xvfb chromium
+    
+    cd $PROJECT_DIR
+    
+    /usr/local/bin/npm ci --legacy-peer-deps
+    
+    /usr/local/bin/npm run dev &
+    
+    echo "Waiting 5 seconds for the Vite development server to start..."
+    sleep 5
+    
+    xvfb-run npm run test:e2e -- --browser chromium
+
+  artifacts:
+    when: always
+    paths:
+      - code/frontend_web/cypress/screenshots/
+      - code/frontend_web/cypress/videos/
+    expire_in: 1 day
+  only:
+    - branches
+
 # Build the Docker image for the frontend
 frontend_build:
   stage: build
